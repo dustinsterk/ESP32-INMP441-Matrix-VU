@@ -155,7 +155,7 @@ void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
         ws.textAll(message);
         break;
       case 'n':
-        pattern = (pattern + 1) % 6;
+        pattern = (pattern + 1) % 7;
         break;
       case 'a':
         autoChangePatterns = !autoChangePatterns;

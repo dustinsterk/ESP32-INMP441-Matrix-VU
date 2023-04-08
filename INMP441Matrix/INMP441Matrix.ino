@@ -52,8 +52,8 @@
 
 #define EEPROM_SIZE 5
 #define LED_PIN     2
-#define M_WIDTH     16
-#define M_HEIGHT    16
+#define M_WIDTH     8
+#define M_HEIGHT    8
 #define NUM_LEDS    (M_WIDTH * M_HEIGHT)
 
 #define EEPROM_BRIGHTNESS   0
@@ -70,6 +70,12 @@ uint16_t displayTime;
 bool autoChangePatterns = false;
 
 #include "web_server.h"
+
+#include "time.h"
+const char* ntpServer = "pool.ntp.org";
+const long  gmtOffset_sec = -18000;
+const int   daylightOffset_sec = 3600;
+
 
 cLEDMatrix<M_WIDTH, M_HEIGHT, HORIZONTAL_ZIGZAG_MATRIX> leds;
 cLEDText ScrollingMsg;
@@ -137,7 +143,12 @@ void setup() {
   pattern = EEPROM.read(EEPROM_PATTERN);
   displayTime = EEPROM.read(EEPROM_DISPLAY_TIME);
 
-  if (WiFi.status() == WL_CONNECTED) showIP();
+  if (WiFi.status() == WL_CONNECTED) 
+  {
+    showIP();
+    //init and get the time
+    configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+  }
 }  
 
 void loop() {
@@ -185,7 +196,7 @@ void loop() {
   
   EVERY_N_SECONDS_I(timingObj, displayTime) {
     timingObj.setPeriod(displayTime);
-    if (autoChangePatterns) pattern = (pattern + 1) % 6;
+    if (autoChangePatterns) pattern = (pattern + 1) % 7;
   }
   
   FastLED.setBrightness(brightness);
@@ -220,6 +231,9 @@ void drawPatterns(uint8_t band) {
       createWaterfall(band);
       EVERY_N_MILLISECONDS(30) { moveWaterfall(); }
       break;
+    case 6:
+      printLocalTime();
+      break;
   }
 
   // Draw peaks
@@ -242,7 +256,10 @@ void drawPatterns(uint8_t band) {
     case 5:
       // No peaks
       break;
-  }
+    case 6:
+    // No peaks
+      break;
+}
 }
 
 void showIP(){
@@ -255,7 +272,29 @@ void showIP(){
   ScrollingMsg.SetText((unsigned char *)strIP, sizeof(strIP) - 1);
   ScrollingMsg.SetTextColrOptions(COLR_RGB | COLR_SINGLE, 0xff, 0xff, 0xff);
   ScrollingMsg.SetScrollDirection(SCROLL_LEFT);
-  ScrollingMsg.SetFrameRate(160 / M_WIDTH);       // Faster for larger matrices
+  ScrollingMsg.SetFrameRate(300 / M_WIDTH);       // Faster for larger matrices
+
+  while(ScrollingMsg.UpdateText() == 0) {
+    FastLED.show();  
+  }
+}
+
+void printLocalTime(){
+  struct tm timeinfo;
+  if(!getLocalTime(&timeinfo)){
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  char locTime[12] = "           ";
+  //sprintf(locTime, "%02d:%02d:%02d", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+  strftime(locTime,12, "%r", &timeinfo); // 12 hour clock with AM_PM, see more formats here https://cplusplus.com/reference/ctime/strftime/
+  Serial.println(locTime);
+  ScrollingMsg.SetFont(MatriseFontData);
+  ScrollingMsg.Init(&leds, leds.Width(), ScrollingMsg.FontHeight() + 1, 0, 0);
+  ScrollingMsg.SetText((unsigned char *)locTime, sizeof(locTime) - 1);
+  ScrollingMsg.SetTextColrOptions(COLR_RGB | COLR_SINGLE, 0x08, 0xC4, 0x1B); //green font
+  ScrollingMsg.SetScrollDirection(SCROLL_LEFT);
+  ScrollingMsg.SetFrameRate(600 / M_WIDTH);       // slower scrolling for time
 
   while(ScrollingMsg.UpdateText() == 0) {
     FastLED.show();  
